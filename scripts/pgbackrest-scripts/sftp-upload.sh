@@ -1,0 +1,91 @@
+#!/bin/bash
+set -e
+
+# SFTP Upload Script for pgBackRest backups
+# Uploads the entire pgBackRest repository to remote SFTP server
+
+echo "[$(date)] === SFTP Upload Starting ==="
+
+# Check if SFTP is enabled
+if [ "${SFTP_ENABLED}" != "true" ]; then
+  echo "[$(date)] SFTP upload disabled (SFTP_ENABLED != true)"
+  exit 0
+fi
+
+# Validate required SFTP variables
+if [ -z "${SFTP_HOST}" ] || [ -z "${SFTP_USER}" ]; then
+  echo "[$(date)] ERROR: SFTP_HOST and SFTP_USER are required when SFTP_ENABLED=true"
+  exit 1
+fi
+
+# Check authentication method
+if [ -n "${SFTP_PASSWORD}" ]; then
+  AUTH_METHOD="password"
+  echo "[$(date)] Using password authentication"
+elif [ -f "/root/.ssh/sftp_key" ]; then
+  AUTH_METHOD="key"
+  echo "[$(date)] Using SSH key authentication"
+else
+  echo "[$(date)] ERROR: No authentication method available (set SFTP_PASSWORD or mount SSH key)"
+  exit 1
+fi
+
+SFTP_PORT=${SFTP_PORT:-22}
+SFTP_REMOTE_PATH=${SFTP_REMOTE_PATH:-/backups}
+BACKUP_REPO="/var/lib/pgbackrest"
+TEMP_ARCHIVE="/tmp/pgbackrest-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
+
+echo "[$(date)] Creating backup archive..."
+tar czf ${TEMP_ARCHIVE} -C /var/lib pgbackrest
+
+if [ $? -ne 0 ]; then
+  echo "[$(date)] ERROR: Failed to create backup archive"
+  exit 1
+fi
+
+ARCHIVE_SIZE=$(du -h ${TEMP_ARCHIVE} | cut -f1)
+echo "[$(date)] Archive created: ${TEMP_ARCHIVE} (${ARCHIVE_SIZE})"
+
+# Upload to SFTP
+upload_to_sftp() {
+  if [ "$AUTH_METHOD" = "password" ]; then
+    sshpass -p "${SFTP_PASSWORD}" sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} << EOF
+-mkdir ${SFTP_REMOTE_PATH}
+-mkdir ${SFTP_REMOTE_PATH}/pgbackrest
+cd ${SFTP_REMOTE_PATH}/pgbackrest
+put ${TEMP_ARCHIVE}
+bye
+EOF
+  else
+    sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} -i /root/.ssh/sftp_key ${SFTP_USER}@${SFTP_HOST} << EOF
+-mkdir ${SFTP_REMOTE_PATH}
+-mkdir ${SFTP_REMOTE_PATH}/pgbackrest
+cd ${SFTP_REMOTE_PATH}/pgbackrest
+put ${TEMP_ARCHIVE}
+bye
+EOF
+  fi
+}
+
+echo "[$(date)] Uploading to ${SFTP_USER}@${SFTP_HOST}:${SFTP_PORT}${SFTP_REMOTE_PATH}/pgbackrest/"
+
+upload_to_sftp
+
+if [ $? -eq 0 ]; then
+  echo "[$(date)] Upload successful: $(basename ${TEMP_ARCHIVE})"
+
+  # Clean up local archive
+  rm -f ${TEMP_ARCHIVE}
+  echo "[$(date)] Local archive removed"
+
+  # Optional: Clean up old remote backups (keep last N backups)
+  KEEP_BACKUPS=${SFTP_KEEP_BACKUPS:-7}
+  echo "[$(date)] Note: Configure remote cleanup to keep last ${KEEP_BACKUPS} backups"
+
+else
+  echo "[$(date)] ERROR: Upload failed"
+  rm -f ${TEMP_ARCHIVE}
+  exit 1
+fi
+
+echo "[$(date)] === SFTP Upload Completed ==="

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: postgres_pgbackrest
+    restart: unless-stopped
+    environment:
+      # PostgreSQL Configuration
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mydb
+      PGDATA: /var/lib/postgresql/data
+
+      # Backup Schedule
+      FULL_BACKUP_SCHEDULE: "0 2 * * 0"      # Full backup: Sunday 2 AM
+      DIFF_BACKUP_SCHEDULE: "0 2 * * 1,2,3,4,5,6"  # Differential: Monday-Saturday 2 AM
+
+      # SFTP Configuration (optional)
+      SFTP_ENABLED: "false"                  # Set to "true" to enable
+      # SFTP_HOST: "sftp.example.com"        # Your SFTP server
+      # SFTP_USER: "backup_user"             # SFTP username
+      # SFTP_PASSWORD: "your_password"       # SFTP password (or use SSH key)
+      # SFTP_PORT: "22"                      # SFTP port (default: 22)
+      # SFTP_REMOTE_PATH: "/backups"         # Remote path (default: /backups)
+      # SFTP_UPLOAD_SCHEDULE: "0 3 * * *"    # Upload schedule (default: 3 AM daily)
+      # SFTP_KEEP_BACKUPS: "7"               # Keep last N backups (default: 7)
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - pgbackrest_repo:/var/lib/pgbackrest
+      - pgbackrest_logs:/var/log/pgbackrest
+      # Optional: Mount SSH key for SFTP authentication
+      # - ./ssh/id_rsa:/root/.ssh/sftp_key:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  pgbackrest_repo:
+    driver: local
+  pgbackrest_logs:
+    driver: local

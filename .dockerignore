@@ -1,0 +1,7 @@
+backups/
+wal_archive/
+.claude/
+README.md
+VOLUMES.md
+.git/
+.gitignore
