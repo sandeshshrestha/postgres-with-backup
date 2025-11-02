@@ -27,21 +27,61 @@ docker compose logs -f
 
 **Note**: PostgreSQL 18+ compatibility is handled by setting `PGDATA=/var/lib/postgresql/data` directly in the container.
 
-### 2. With SFTP Upload
+### 2. With SFTP Upload (SSH Key Required)
 
-Edit `docker-compose.yml` and enable SFTP:
-
-```yaml
-SFTP_ENABLED: "true"
-SFTP_HOST: "your-sftp-server.com"
-SFTP_USER: "your_username"
-SFTP_PASSWORD: "your_password"
-```
-
-Then restart the container:
+**Step 1: Generate SSH Key**
 
 ```bash
-docker compose restart postgres
+mkdir -p ssh
+ssh-keygen -t rsa -b 4096 -f ssh/id_rsa -N "" -C "postgres-backup"
+```
+
+**Step 2: Copy Public Key to SFTP Server**
+
+```bash
+ssh-copy-id -i ssh/id_rsa.pub user@sftp.example.com
+```
+
+**Step 3: Configure docker-compose.yml**
+
+Add your SSH private key content to the `SFTP_SSH_KEY` environment variable:
+
+```yaml
+environment:
+  SFTP_ENABLED: "true"
+  SFTP_HOST: "sftp.example.com"
+  SFTP_USER: "backup_user"
+  SFTP_SSH_KEY: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+    ... (paste your full SSH private key content here) ...
+    -----END OPENSSH PRIVATE KEY-----
+```
+
+**Or use a .env file** (recommended to keep secrets out of docker-compose.yml):
+
+```bash
+# Create .env file (never commit this!)
+cat > .env << 'EOF'
+SFTP_SSH_KEY="-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+... (your full SSH private key) ...
+-----END OPENSSH PRIVATE KEY-----"
+EOF
+
+chmod 600 .env
+```
+
+Then reference in docker-compose.yml:
+```yaml
+environment:
+  SFTP_SSH_KEY: ${SFTP_SSH_KEY}
+```
+
+**Step 4: Start Container**
+
+```bash
+docker compose up -d
 ```
 
 ## Configuration
@@ -58,7 +98,7 @@ docker compose restart postgres
 | `SFTP_ENABLED` | `false` | Enable SFTP upload |
 | `SFTP_HOST` | - | SFTP server hostname |
 | `SFTP_USER` | - | SFTP username |
-| `SFTP_PASSWORD` | - | SFTP password |
+| `SFTP_SSH_KEY` | - | SSH private key content (multiline string) |
 | `SFTP_PORT` | `22` | SFTP port |
 | `SFTP_REMOTE_PATH` | `/backups` | Remote directory |
 | `SFTP_UPLOAD_SCHEDULE` | `0 3 * * *` | Upload schedule (3 AM daily) |
@@ -178,30 +218,101 @@ postgres/
       └── ...
 ```
 
-## SSH Key Authentication (Recommended)
+## SFTP Authentication
 
-Instead of using password, use SSH key for better security:
+**SSH key authentication is required** for SFTP uploads. Password authentication is not supported for security reasons.
 
-1. Generate SSH key pair:
+The SSH private key must be provided via the `SFTP_SSH_KEY` environment variable.
+
+### Setup SSH Authentication
+
+**1. Generate SSH key pair**:
 ```bash
 mkdir -p ssh
-ssh-keygen -t rsa -b 4096 -f ssh/id_rsa -N ""
+ssh-keygen -t rsa -b 4096 -f ssh/id_rsa -N "" -C "postgres-backup"
 ```
 
-2. Copy public key to SFTP server:
+**2. Add public key to SFTP server**:
 ```bash
 ssh-copy-id -i ssh/id_rsa.pub user@sftp.example.com
 ```
 
-3. Update docker-compose.yml:
-```yaml
-volumes:
-  - ./ssh/id_rsa:/root/.ssh/sftp_key:ro
-
-environment:
-  # Remove or comment out SFTP_PASSWORD
-  # SFTP_PASSWORD: "your_password"
+**3. Get the private key content**:
+```bash
+cat ssh/id_rsa
 ```
+
+**4. Configure the SSH key**:
+
+**Option A: Direct in docker-compose.yml**
+```yaml
+environment:
+  SFTP_ENABLED: "true"
+  SFTP_HOST: "sftp.example.com"
+  SFTP_USER: "backup_user"
+  SFTP_SSH_KEY: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+    ... (paste your full SSH private key content) ...
+    -----END OPENSSH PRIVATE KEY-----
+```
+
+**Option B: Using .env file (Recommended)**
+```bash
+# Create .env file (never commit this!)
+cat > .env << 'EOF'
+SFTP_SSH_KEY="-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+... (your full SSH private key) ...
+-----END OPENSSH PRIVATE KEY-----"
+EOF
+
+chmod 600 .env
+```
+
+Then reference in docker-compose.yml:
+```yaml
+environment:
+  SFTP_SSH_KEY: ${SFTP_SSH_KEY}
+```
+
+**Option C: Kubernetes Secret**
+```bash
+# Create Kubernetes secret from SSH key file
+kubectl create secret generic postgres-sftp-key \
+  --from-file=ssh-key=ssh/id_rsa
+
+# Reference in your deployment
+env:
+  - name: SFTP_SSH_KEY
+    valueFrom:
+      secretKeyRef:
+        name: postgres-sftp-key
+        key: ssh-key
+```
+
+### Security Best Practices
+
+**⚠️ Important**: Never commit your private key to version control!
+
+The `.gitignore` file is already configured to protect:
+- `ssh/id_rsa` and all SSH private keys
+- `.env` files
+- All private key patterns
+
+**Test SSH connection**:
+```bash
+# Test from your local machine
+ssh -i ssh/id_rsa user@sftp.example.com
+```
+
+### Why Environment Variable Only?
+
+- ✅ **Cloud-native**: Works seamlessly with Kubernetes, Docker Swarm, AWS ECS
+- ✅ **Secrets management**: Integrates with all major secrets managers (Kubernetes Secrets, Docker Secrets, AWS Secrets Manager, HashiCorp Vault, etc.)
+- ✅ **Secure**: No files on disk, automatic cleanup of temporary files
+- ✅ **Flexible**: Easy to rotate keys via CI/CD pipelines
+- ✅ **Universal**: Same approach works everywhere (local, cloud, Kubernetes)
 
 ## Monitoring
 

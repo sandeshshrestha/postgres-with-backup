@@ -18,17 +18,33 @@ if [ -z "${SFTP_HOST}" ] || [ -z "${SFTP_USER}" ]; then
   exit 1
 fi
 
-# Check authentication method
-if [ -n "${SFTP_PASSWORD}" ]; then
-  AUTH_METHOD="password"
-  echo "[$(date)] Using password authentication"
-elif [ -f "/root/.ssh/sftp_key" ]; then
-  AUTH_METHOD="key"
-  echo "[$(date)] Using SSH key authentication"
-else
-  echo "[$(date)] ERROR: No authentication method available (set SFTP_PASSWORD or mount SSH key)"
+# SSH key authentication - requires SFTP_SSH_KEY environment variable
+if [ -z "${SFTP_SSH_KEY}" ]; then
+  echo "[$(date)] ERROR: SFTP_SSH_KEY environment variable is required!"
+  echo "[$(date)]"
+  echo "[$(date)] Please provide your SSH private key as an environment variable:"
+  echo "[$(date)]   SFTP_SSH_KEY='-----BEGIN OPENSSH PRIVATE KEY-----"
+  echo "[$(date)]   b3BlbnNzaC1rZXktdjEAAAAA..."
+  echo "[$(date)]   -----END OPENSSH PRIVATE KEY-----'"
+  echo "[$(date)]"
+  echo "[$(date)] Example in docker-compose.yml:"
+  echo "[$(date)]   environment:"
+  echo "[$(date)]     SFTP_SSH_KEY: |"
+  echo "[$(date)]       -----BEGIN OPENSSH PRIVATE KEY-----"
+  echo "[$(date)]       (your full SSH private key content)"
+  echo "[$(date)]       -----END OPENSSH PRIVATE KEY-----"
   exit 1
 fi
+
+echo "[$(date)] Using SSH key from SFTP_SSH_KEY environment variable"
+
+# Create temporary file for SSH key
+TEMP_KEY_FILE="/tmp/sftp_key_$$"
+echo "${SFTP_SSH_KEY}" > "${TEMP_KEY_FILE}"
+chmod 600 "${TEMP_KEY_FILE}"
+SSH_KEY_FILE="${TEMP_KEY_FILE}"
+
+echo "[$(date)] SSH key configured successfully"
 
 SFTP_PORT=${SFTP_PORT:-22}
 SFTP_REMOTE_PATH=${SFTP_REMOTE_PATH:-/backups}
@@ -46,25 +62,16 @@ fi
 ARCHIVE_SIZE=$(du -h ${TEMP_ARCHIVE} | cut -f1)
 echo "[$(date)] Archive created: ${TEMP_ARCHIVE} (${ARCHIVE_SIZE})"
 
-# Upload to SFTP
+# Upload to SFTP using SSH key
 upload_to_sftp() {
-  if [ "$AUTH_METHOD" = "password" ]; then
-    sshpass -p "${SFTP_PASSWORD}" sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} << EOF
+  sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} -i "${SSH_KEY_FILE}" ${SFTP_USER}@${SFTP_HOST} << EOF
 -mkdir ${SFTP_REMOTE_PATH}
--mkdir ${SFTP_REMOTE_PATH}/pgbackrest
-cd ${SFTP_REMOTE_PATH}/pgbackrest
+-mkdir ${SFTP_REMOTE_PATH}/postgres
+-mkdir ${SFTP_REMOTE_PATH}/postgres/pgbackrest
+cd ${SFTP_REMOTE_PATH}/postgres/pgbackrest
 put ${TEMP_ARCHIVE}
 bye
 EOF
-  else
-    sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} -i /root/.ssh/sftp_key ${SFTP_USER}@${SFTP_HOST} << EOF
--mkdir ${SFTP_REMOTE_PATH}
--mkdir ${SFTP_REMOTE_PATH}/pgbackrest
-cd ${SFTP_REMOTE_PATH}/pgbackrest
-put ${TEMP_ARCHIVE}
-bye
-EOF
-  fi
 }
 
 echo "[$(date)] Uploading to ${SFTP_USER}@${SFTP_HOST}:${SFTP_PORT}${SFTP_REMOTE_PATH}/pgbackrest/"
@@ -85,7 +92,16 @@ if [ $? -eq 0 ]; then
 else
   echo "[$(date)] ERROR: Upload failed"
   rm -f ${TEMP_ARCHIVE}
+
+  # Clean up temporary SSH key
+  rm -f "${TEMP_KEY_FILE}"
+  echo "[$(date)] Temporary SSH key removed"
+
   exit 1
 fi
+
+# Clean up temporary SSH key
+rm -f "${TEMP_KEY_FILE}"
+echo "[$(date)] Temporary SSH key removed"
 
 echo "[$(date)] === SFTP Upload Completed ==="

@@ -1,0 +1,27 @@
+# SSH Keys - Never commit private keys!
+ssh/id_rsa
+ssh/*_rsa
+ssh/*.pem
+ssh/*.key
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker volumes data
+postgres_data/
+pgbackrest_repo/
+pgbackrest_logs/
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

@@ -18,11 +18,14 @@ services:
       FULL_BACKUP_SCHEDULE: "0 2 * * 0"      # Full backup: Sunday 2 AM
       DIFF_BACKUP_SCHEDULE: "0 2 * * 1,2,3,4,5,6"  # Differential: Monday-Saturday 2 AM
 
-      # SFTP Configuration (optional)
+      # SFTP Configuration (optional - requires SSH key in environment variable)
       SFTP_ENABLED: "false"                  # Set to "true" to enable
       # SFTP_HOST: "sftp.example.com"        # Your SFTP server
       # SFTP_USER: "backup_user"             # SFTP username
-      # SFTP_PASSWORD: "your_password"       # SFTP password (or use SSH key)
+      # SFTP_SSH_KEY: |                      # SSH private key (full content)
+      #   -----BEGIN OPENSSH PRIVATE KEY-----
+      #   your_ssh_private_key_content_here
+      #   -----END OPENSSH PRIVATE KEY-----
       # SFTP_PORT: "22"                      # SFTP port (default: 22)
       # SFTP_REMOTE_PATH: "/backups"         # Remote path (default: /backups)
       # SFTP_UPLOAD_SCHEDULE: "0 3 * * *"    # Upload schedule (default: 3 AM daily)
@@ -35,8 +38,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - pgbackrest_repo:/var/lib/pgbackrest
       - pgbackrest_logs:/var/log/pgbackrest
-      # Optional: Mount SSH key for SFTP authentication
-      # - ./ssh/id_rsa:/root/.ssh/sftp_key:ro
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]

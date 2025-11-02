@@ -14,7 +14,7 @@ This is a PostgreSQL backup system using **pgBackRest** with optional SFTP uploa
 
 1. **Custom Dockerfile** (`Dockerfile`):
    - Extends `postgres:18` base image
-   - Installs pgBackRest, cron, and SFTP tools (openssh-client, sshpass)
+   - Installs pgBackRest, cron, and openssh-client
    - Sets up directory structure for pgBackRest repository, logs, and spools
    - Copies configuration and scripts into the container
 
@@ -131,13 +131,17 @@ All backup schedules and SFTP settings are controlled via environment variables 
 
 **Critical**: SFTP_ENABLED must be exactly "true" (string) for SFTP to work. The bash scripts use string comparison: `[ "${SFTP_ENABLED}" = "true" ]`
 
-### Authentication Methods
+### Authentication Method
 
-SFTP supports two auth methods checked in order:
-1. Password: If `SFTP_PASSWORD` is set
-2. SSH Key: If `/root/.ssh/sftp_key` file exists (mounted volume)
+SFTP uses **SSH key authentication only** (password authentication was removed for security).
 
-The sftp-upload.sh script detects which method is available and uses appropriate SFTP commands.
+The SSH private key must be provided via the `SFTP_SSH_KEY` environment variable. The script:
+1. Creates a temporary file from the environment variable content
+2. Sets proper permissions (600)
+3. Uses the key for SFTP connection
+4. Automatically cleans up the temporary key file after use
+
+This approach is cloud-native and works with all secrets management systems.
 
 ### Backup Types and Strategy
 
@@ -186,13 +190,16 @@ Set these environment variables in docker-compose.yml:
 SFTP_ENABLED: "true"
 SFTP_HOST: "your-server.com"
 SFTP_USER: "username"
-SFTP_PASSWORD: "password"  # OR mount SSH key
+SFTP_SSH_KEY: |
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  (your full SSH private key content)
+  -----END OPENSSH PRIVATE KEY-----
 ```
 
-For SSH key auth, mount the key:
+Or use a .env file (recommended):
 ```yaml
-volumes:
-  - ./ssh/id_rsa:/root/.ssh/sftp_key:ro
+environment:
+  SFTP_SSH_KEY: ${SFTP_SSH_KEY}
 ```
 
 ## Common Issues
