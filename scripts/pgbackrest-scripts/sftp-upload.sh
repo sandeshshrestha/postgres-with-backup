@@ -66,15 +66,13 @@ echo "[$(date)] Archive created: ${TEMP_ARCHIVE} (${ARCHIVE_SIZE})"
 upload_to_sftp() {
   sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} -i "${SSH_KEY_FILE}" ${SFTP_USER}@${SFTP_HOST} << EOF
 -mkdir ${SFTP_REMOTE_PATH}
--mkdir ${SFTP_REMOTE_PATH}/postgres
--mkdir ${SFTP_REMOTE_PATH}/postgres/pgbackrest
-cd ${SFTP_REMOTE_PATH}/postgres/pgbackrest
+cd ${SFTP_REMOTE_PATH}
 put ${TEMP_ARCHIVE}
 bye
 EOF
 }
 
-echo "[$(date)] Uploading to ${SFTP_USER}@${SFTP_HOST}:${SFTP_PORT}${SFTP_REMOTE_PATH}/pgbackrest/"
+echo "[$(date)] Uploading to ${SFTP_USER}@${SFTP_HOST}:${SFTP_PORT}${SFTP_REMOTE_PATH}"
 
 upload_to_sftp
 

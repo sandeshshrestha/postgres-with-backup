@@ -51,7 +51,7 @@ This approach ensures:
 Three bash scripts in `scripts/pgbackrest-scripts/`:
 
 1. **backup.sh**: Wrapper that runs pgBackRest with specified type (full/diff), then triggers SFTP upload if enabled
-2. **sftp-upload.sh**: Creates tar.gz of entire pgBackRest repository and uploads to remote SFTP server
+2. **sftp-upload.sh**: Creates tar.gz of entire pgBackRest repository and uploads directly to SFTP_REMOTE_PATH on remote server
 3. **entrypoint.sh**: Container initialization (described above)
 
 ### Configuration Files
@@ -190,11 +190,14 @@ Set these environment variables in docker-compose.yml:
 SFTP_ENABLED: "true"
 SFTP_HOST: "your-server.com"
 SFTP_USER: "username"
+SFTP_REMOTE_PATH: "/backups"         # Uploads directly to this path
 SFTP_SSH_KEY: |
   -----BEGIN OPENSSH PRIVATE KEY-----
   (your full SSH private key content)
   -----END OPENSSH PRIVATE KEY-----
 ```
+
+**Note**: Backups are uploaded directly to `SFTP_REMOTE_PATH` (e.g., `/backups/file.tar.gz`). To organize by database, set a custom path like `/backups/postgres`.
 
 Or use a .env file (recommended):
 ```yaml

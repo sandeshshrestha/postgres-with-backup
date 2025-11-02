@@ -100,7 +100,7 @@ docker compose up -d
 | `SFTP_USER` | - | SFTP username |
 | `SFTP_SSH_KEY` | - | SSH private key content (multiline string) |
 | `SFTP_PORT` | `22` | SFTP port |
-| `SFTP_REMOTE_PATH` | `/backups` | Remote directory |
+| `SFTP_REMOTE_PATH` | `/backups` | Remote directory path (exact upload location) |
 | `SFTP_UPLOAD_SCHEDULE` | `0 3 * * *` | Upload schedule (3 AM daily) |
 | `SFTP_KEEP_BACKUPS` | `7` | Number of backups to keep |
 
@@ -210,12 +210,28 @@ postgres/
 
 ## SFTP Upload Structure
 
+Backups are uploaded directly to the configured `SFTP_REMOTE_PATH`:
+
 ```
-/backups/postgres/            # SFTP_REMOTE_PATH
-  └── pgbackrest/
-      ├── pgbackrest-backup-20251031_020000.tar.gz
-      ├── pgbackrest-backup-20251101_020000.tar.gz
-      └── ...
+/backups/                     # SFTP_REMOTE_PATH (default)
+  ├── pgbackrest-backup-20251031_020000.tar.gz
+  ├── pgbackrest-backup-20251101_020000.tar.gz
+  └── ...
+```
+
+**To organize by database or service**, customize the remote path:
+
+```yaml
+# In docker-compose.yml
+environment:
+  SFTP_REMOTE_PATH: "/backups/postgres"  # Or /backups/mydb, /backups/production, etc.
+```
+
+This will upload to:
+```
+/backups/postgres/
+  ├── pgbackrest-backup-20251031_020000.tar.gz
+  └── ...
 ```
 
 ## SFTP Authentication

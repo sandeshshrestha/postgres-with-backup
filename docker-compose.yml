@@ -27,7 +27,7 @@ services:
       #   your_ssh_private_key_content_here
       #   -----END OPENSSH PRIVATE KEY-----
       # SFTP_PORT: "22"                      # SFTP port (default: 22)
-      # SFTP_REMOTE_PATH: "/backups"         # Remote path (default: /backups)
+      # SFTP_REMOTE_PATH: "/backups"         # Exact upload directory (e.g., /backups/postgres for organization)
       # SFTP_UPLOAD_SCHEDULE: "0 3 * * *"    # Upload schedule (default: 3 AM daily)
       # SFTP_KEEP_BACKUPS: "7"               # Keep last N backups (default: 7)
 
