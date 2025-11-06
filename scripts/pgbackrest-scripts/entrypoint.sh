@@ -79,6 +79,9 @@ EOF
         echo "${SFTP_UPLOAD_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/sftp-upload.sh >> /var/log/pgbackrest-cron.log 2>&1" >> /etc/cron.d/pgbackrest
     fi
 
+    # Add trailing newline (required by cron specification)
+    echo "" >> /etc/cron.d/pgbackrest
+
     chmod 0644 /etc/cron.d/pgbackrest
 
     # Start cron
