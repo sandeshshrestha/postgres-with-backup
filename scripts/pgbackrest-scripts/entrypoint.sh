@@ -82,7 +82,14 @@ EOF
     # Add trailing newline (required by cron specification)
     echo "" >> /etc/cron.d/pgbackrest
 
-    chmod 0644 /etc/cron.d/pgbackrest
+    crontab /etc/cron.d/pgbackrest
+    if [ $? -eq 0 ]; then
+        echo "Cron jobs installed successfully"
+        crontab -l  # Show installed jobs for verification
+    else
+        echo "ERROR: Failed to install cron jobs"
+        return 1
+    fi
 
     # Start cron
     echo "Starting cron daemon..."
