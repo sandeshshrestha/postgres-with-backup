@@ -159,7 +159,7 @@ Three persistent volumes:
 
 ### Cron Job Setup
 
-Cron jobs are dynamically written to `/etc/cron.d/pgbackrest` based on environment variables. The entrypoint uses here-doc syntax to create the cron file at container startup.
+Cron jobs are dynamically written to `/etc/pgbackrest_cron` based on environment variables. The entrypoint uses here-doc syntax to create the cron file at container startup.
 
 ## Modifying the System
 

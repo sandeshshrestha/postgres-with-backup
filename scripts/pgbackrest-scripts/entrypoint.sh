@@ -67,7 +67,7 @@ setup_cron() {
     echo "Differential backup schedule: ${DIFF_BACKUP_SCHEDULE}"
 
     # Create cron jobs
-    cat > /etc/cron.d/pgbackrest << EOF
+    cat > /etc/crontab << EOF
 ${FULL_BACKUP_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/backup.sh full >> /var/log/pgbackrest-cron.log 2>&1
 ${DIFF_BACKUP_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/backup.sh diff >> /var/log/pgbackrest-cron.log 2>&1
 EOF
@@ -76,20 +76,11 @@ EOF
     if [ "${SFTP_ENABLED}" = "true" ]; then
         SFTP_UPLOAD_SCHEDULE=${SFTP_UPLOAD_SCHEDULE:-"0 3 * * *"}
         echo "SFTP upload schedule: ${SFTP_UPLOAD_SCHEDULE}"
-        echo "${SFTP_UPLOAD_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/sftp-upload.sh >> /var/log/pgbackrest-cron.log 2>&1" >> /etc/cron.d/pgbackrest
+        echo "${SFTP_UPLOAD_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/sftp-upload.sh >> /var/log/pgbackrest-cron.log 2>&1" >> /etc/crontab
     fi
 
     # Add trailing newline (required by cron specification)
-    echo "" >> /etc/cron.d/pgbackrest
-
-    crontab /etc/cron.d/pgbackrest
-    if [ $? -eq 0 ]; then
-        echo "Cron jobs installed successfully"
-        crontab -l  # Show installed jobs for verification
-    else
-        echo "ERROR: Failed to install cron jobs"
-        return 1
-    fi
+    echo "" >> /etc/crontab
 
     # Start cron
     echo "Starting cron daemon..."
