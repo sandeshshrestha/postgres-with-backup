@@ -66,17 +66,40 @@ setup_cron() {
     echo "Full backup schedule: ${FULL_BACKUP_SCHEDULE}"
     echo "Differential backup schedule: ${DIFF_BACKUP_SCHEDULE}"
 
-    # Create cron jobs
+    # Create an environment file that cron jobs can source so they have
+    # access to the container's environment variables (SFTP_*, POSTGRES_*, etc.)
+    cat > /etc/pgbackrest_env << EOF
+export PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+export SFTP_ENABLED="${SFTP_ENABLED:-}"
+export SFTP_HOST="${SFTP_HOST:-}"
+export SFTP_USER="${SFTP_USER:-}"
+export SFTP_SSH_KEY="${SFTP_SSH_KEY:-}"
+export SFTP_PORT="${SFTP_PORT:-}"
+export SFTP_REMOTE_PATH="${SFTP_REMOTE_PATH:-}"
+export SFTP_KEEP_BACKUPS="${SFTP_KEEP_BACKUPS:-}"
+export POSTGRES_USER="${POSTGRES_USER:-postgres}"
+export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
+export POSTGRES_DB="${POSTGRES_DB:-mydb}"
+export PGPASSWORD="${POSTGRES_PASSWORD:-postgres}"
+EOF
+    chmod 600 /etc/pgbackrest_env
+
+    # Create system crontab entries. We use /bin/bash -lc to source the
+    # environment file before running the actual script so cron jobs get
+    # the expected environment.
     cat > /etc/crontab << EOF
-${FULL_BACKUP_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/backup.sh full >> /var/log/pgbackrest-cron.log 2>&1
-${DIFF_BACKUP_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/backup.sh diff >> /var/log/pgbackrest-cron.log 2>&1
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+${FULL_BACKUP_SCHEDULE} root /bin/bash -lc "source /etc/pgbackrest_env && /usr/local/bin/pgbackrest-scripts/backup.sh full >> /var/log/pgbackrest-cron.log 2>&1"
+${DIFF_BACKUP_SCHEDULE} root /bin/bash -lc "source /etc/pgbackrest_env && /usr/local/bin/pgbackrest-scripts/backup.sh diff >> /var/log/pgbackrest-cron.log 2>&1"
 EOF
 
     # Add SFTP upload cron if enabled
     if [ "${SFTP_ENABLED}" = "true" ]; then
         SFTP_UPLOAD_SCHEDULE=${SFTP_UPLOAD_SCHEDULE:-"0 3 * * *"}
         echo "SFTP upload schedule: ${SFTP_UPLOAD_SCHEDULE}"
-        echo "${SFTP_UPLOAD_SCHEDULE} root /usr/local/bin/pgbackrest-scripts/sftp-upload.sh >> /var/log/pgbackrest-cron.log 2>&1" >> /etc/crontab
+        echo "${SFTP_UPLOAD_SCHEDULE} root /bin/bash -lc \"source /etc/pgbackrest_env && /usr/local/bin/pgbackrest-scripts/sftp-upload.sh >> /var/log/pgbackrest-cron.log 2>&1\"" >> /etc/crontab
     fi
 
     # Add trailing newline (required by cron specification)
